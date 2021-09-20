@@ -1,72 +1,161 @@
-import type { NextPage } from 'next'
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import type { NextPage } from "next";
+import Head from "next/head";
+import Image from "next/image";
+import { useEffect, useState } from "react";
+import styles from "../styles/Home.module.css";
+import FileSaver from "file-saver";
+import JsZip from "jszip";
+type IRowData = {
+  key: string;
+  spanish: string;
+  english: string;
+};
+interface IInputRow {
+  data: IRowData;
+  index: number;
+  removeItem: any;
+}
+function useDebounce(value: any, delay: any) {
+  // State and setters for debounced value
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(
+    () => {
+      // Update debounced value after delay
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
+      // Cancel the timeout if value changes (also on delay change or unmount)
+      // This is how we prevent debounced value from updating if value is changed ...
+      // .. within the delay period. Timeout gets cleared and restarted.
+      return () => {
+        clearTimeout(handler);
+      };
+    },
+    [value, delay] // Only re-call effect if value or delay changes
+  );
+  return debouncedValue;
+}
+const InputRow: React.FC<IInputRow> = ({ data, index, removeItem }) => {
+  const [dataKey, setDataKey] = useState(data.key);
+  const [dataSpanish, setDataSpanish] = useState(data.spanish);
+  const [dataEnglish, setDataEnglish] = useState(data.english);
+  const debouncedKey = useDebounce(dataKey, 300),
+    debounceSpanish = useDebounce(dataSpanish, 300),
+    debounceEnglish = useDebounce(dataEnglish, 300);
+
+  useEffect(() => {
+    const currentState = JSON.parse(localStorage.getItem("jsonData") || "[]");
+    currentState[index] = { key: debouncedKey, spanish: debounceSpanish, english: debounceEnglish };
+    localStorage.setItem("jsonData", JSON.stringify(currentState));
+  }, [debouncedKey, debounceSpanish, debounceEnglish, index]);
+  console.log(data);
+  return (
+    <div className={styles.inputRow} data-name="inputRow">
+      <input type="text" name="jsonKeys" defaultValue={dataKey} onChange={(e) => setDataKey(e.target.value)} />
+      <input type="text" name="spanish" defaultValue={dataSpanish} onChange={(e) => setDataSpanish(e.target.value)} />
+      <input type="text" name="english" defaultValue={dataEnglish} onChange={(e) => setDataEnglish(e.target.value)} />
+      {index != 0 && (
+        <div className={styles.inputRowDelete} style={{ cursor: "pointer" }}>
+          <Image src="/delete.svg" alt="delete" width={24} height={24} onClick={() => removeItem(dataKey)}></Image>
+        </div>
+      )}
+    </div>
+  );
+};
+const tempRowData = { key: "", spanish: "", english: "" };
+const aggregar = (setData: any) => {
+  let currentData = JSON.parse(localStorage.getItem("jsonData") || "[]");
+  let finalData = [...currentData, tempRowData];
+  localStorage.setItem("jsonData", JSON.stringify(finalData));
+  setData(finalData);
+};
+const downloadFile = () => {
+  const zip = JsZip();
+  const componentName = document.getElementById("componentName")?.value;
+  const data: Array<{ key: string; spanish: string; english: string }> = JSON.parse(localStorage.getItem("jsonData") || "[]");
+  const spanishJson: any = {};
+  const englishJson: any = {};
+  for (let row of data) {
+    spanishJson[`${componentName}-${row.key}`] = row.spanish;
+    englishJson[`${componentName}-${row.key}`] = row.english;
+  }
+
+  const fileSpanish = new Blob([JSON.stringify(spanishJson)], { type: "text/json" });
+  const fileEnglish = new Blob([JSON.stringify(englishJson)], { type: "text/json" });
+  zip.file(componentName + "-es.json", fileSpanish);
+  zip.file(componentName + "-en.json", fileEnglish);
+  zip.generateAsync({ type: "blob" }).then((zipFile) => {
+    return FileSaver.saveAs(zipFile, componentName + "-locales.zip");
+  });
+};
 
 const Home: NextPage = () => {
+  const [RowData, setRowData] = useState<Array<IRowData>>([]);
+  useEffect(() => {
+    const currentRowData = JSON.parse(localStorage.getItem("jsonData") || "[]");
+    if (currentRowData) {
+      setRowData(currentRowData);
+    } else {
+      setRowData([tempRowData]);
+    }
+  }, []);
+  const cleanAll = () => {
+    setRowData([tempRowData]);
+    localStorage.setItem("jsonData", JSON.stringify([tempRowData]));
+    const row = document.querySelector("[data-name='inputRow']");
+
+    const childrens = [...row?.children];
+    childrens.forEach((element) => {
+      element.value = "";
+    });
+  };
+  const removeItem = (key: string) => {
+    const currentData = [...RowData];
+    const newData = currentData.filter((item) => item.key != key);
+    setRowData([...newData]);
+    localStorage.setItem("jsonData", JSON.stringify(newData));
+  };
   return (
     <div className={styles.container}>
       <Head>
-        <title>Create Next App</title>
+        <title>JSON Generator</title>
         <meta name="description" content="Generated by create next app" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-
-      <main className={styles.main}>
-        <h1 className={styles.title}>
-          Welcome to <a href="https://nextjs.org">Next.js!</a>
-        </h1>
-
-        <p className={styles.description}>
-          Get started by editing{' '}
-          <code className={styles.code}>pages/index.js</code>
-        </p>
-
-        <div className={styles.grid}>
-          <a href="https://nextjs.org/docs" className={styles.card}>
-            <h2>Documentation &rarr;</h2>
-            <p>Find in-depth information about Next.js features and API.</p>
-          </a>
-
-          <a href="https://nextjs.org/learn" className={styles.card}>
-            <h2>Learn &rarr;</h2>
-            <p>Learn about Next.js in an interactive course with quizzes!</p>
-          </a>
-
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className={styles.card}
-          >
-            <h2>Examples &rarr;</h2>
-            <p>Discover and deploy boilerplate example Next.js projects.</p>
-          </a>
-
-          <a
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className={styles.card}
-          >
-            <h2>Deploy &rarr;</h2>
-            <p>
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
+      <div className={styles.page}>
+        <div className={styles.row1}>
+          <label htmlFor="">
+            Nombre del Componente ej (whatsapp)
+            <input type="text" name="" id="componentName" className="el-2" style={{ padding: "0.5em" }} />
+          </label>
         </div>
-      </main>
+        <div className={styles.row2}>
+          <div className={styles.row2Header}>
+            <div>Json Key Name</div>
+            <div>Texto Español</div>
+            <div>Texto Ingles</div>
+          </div>
+          <div className={styles.row2InputsList}>
+            {RowData.map((el, index) => (
+              <InputRow key={`row-${index}`} data={el} index={index} removeItem={removeItem} />
+            ))}
+          </div>
+          <button style={{ padding: "0.5rem", background: "#1dab91", color: "white" }} onClick={() => aggregar(setRowData)}>
+            Agregar
+          </button>
+        </div>
+        <div style={{ display: "flex", width: "100%" }}>
+          <button style={{ marginRight: "auto", background: "#e01b3f", color: "white" }} onClick={cleanAll}>
+            LIMPIAR TODO
+          </button>
 
-      <footer className={styles.footer}>
-        <a
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <span className={styles.logo}>
-            <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
-          </span>
-        </a>
-      </footer>
+          <button style={{ padding: "1rem", background: "#264399", color: "white" }} onClick={() => setTimeout(downloadFile, 1000)}>
+            Generar Json
+          </button>
+        </div>
+      </div>
     </div>
-  )
-}
+  );
+};
 
-export default Home
+export default Home;
